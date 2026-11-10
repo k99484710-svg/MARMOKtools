@@ -25,10 +25,16 @@ jobs:
         with:
           gradle-version: "8.9"
 
-      - name: Setup Android
+      - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: |
+            platform-tools
+            platforms;android-35
+            build-tools;35.0.0
 
       - name: Create Android project
+        shell: bash
         run: |
           mkdir -p app/src/main/java/com/marmok/generator
 
@@ -67,9 +73,11 @@ jobs:
               id("com.android.application")
               id("org.jetbrains.kotlin.android")
           }
+
           android {
               namespace = "com.marmok.generator"
               compileSdk = 35
+
               defaultConfig {
                   applicationId = "com.marmok.generator"
                   minSdk = 23
@@ -77,10 +85,12 @@ jobs:
                   versionCode = 1
                   versionName = "1.0"
               }
+
               compileOptions {
                   sourceCompatibility = JavaVersion.VERSION_17
                   targetCompatibility = JavaVersion.VERSION_17
               }
+
               kotlinOptions {
                   jvmTarget = "17"
               }
@@ -131,7 +141,7 @@ jobs:
                   layout.setPadding(28, 40, 28, 28)
                   layout.setBackgroundColor(Color.rgb(18, 18, 24))
 
-                  fun text(value: String, size: Float): TextView {
+                  fun makeText(value: String, size: Float): TextView {
                       return TextView(this).apply {
                           text = value
                           textSize = size
@@ -140,19 +150,18 @@ jobs:
                       }
                   }
 
-                  layout.addView(text("MARMOK", 32f))
-                  layout.addView(text("KEY GENERATOR", 16f))
+                  layout.addView(makeText("MARMOK", 32f))
+                  layout.addView(makeText("KEY GENERATOR", 16f))
 
                   period = Spinner(this)
-                  val options = listOf("1D", "7D", "30D", "LIFETIME")
                   period.adapter = ArrayAdapter(
                       this,
                       android.R.layout.simple_spinner_dropdown_item,
-                      options
+                      listOf("1D", "7D", "30D", "LIFETIME")
                   )
                   layout.addView(period)
 
-                  result = text("Здесь появится ключ", 18f)
+                  result = makeText("Здесь появится ключ", 18f)
                   result.setPadding(8, 40, 8, 40)
                   layout.addView(result)
 
@@ -181,9 +190,13 @@ jobs:
                           clipboard.setPrimaryClip(
                               ClipData.newPlainText("MARMOK key", key)
                           )
-                          Toast.makeText(this, "Скопировано", Toast.LENGTH_SHORT).show()
+                          Toast.makeText(
+                              this, "Скопировано", Toast.LENGTH_SHORT
+                          ).show()
                       } else {
-                          Toast.makeText(this, "Сначала создай ключ", Toast.LENGTH_SHORT).show()
+                          Toast.makeText(
+                              this, "Сначала создай ключ", Toast.LENGTH_SHORT
+                          ).show()
                       }
                   }
 
