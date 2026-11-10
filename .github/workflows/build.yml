@@ -1,0 +1,203 @@
+name: Build MARMOK APK
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/build.yml"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: Setup Android
+        uses: android-actions/setup-android@v3
+
+      - name: Create Android project
+        run: |
+          mkdir -p app/src/main/java/com/marmok/generator
+
+          cat > settings.gradle.kts <<'EOF'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = "MARMOKGenerator"
+          include(":app")
+          EOF
+
+          cat > build.gradle.kts <<'EOF'
+          plugins {
+              id("com.android.application") version "8.7.3" apply false
+              id("org.jetbrains.kotlin.android") version "2.0.21" apply false
+          }
+          EOF
+
+          cat > gradle.properties <<'EOF'
+          android.useAndroidX=true
+          org.gradle.jvmargs=-Xmx2g
+          EOF
+
+          cat > app/build.gradle.kts <<'EOF'
+          plugins {
+              id("com.android.application")
+              id("org.jetbrains.kotlin.android")
+          }
+          android {
+              namespace = "com.marmok.generator"
+              compileSdk = 35
+              defaultConfig {
+                  applicationId = "com.marmok.generator"
+                  minSdk = 23
+                  targetSdk = 35
+                  versionCode = 1
+                  versionName = "1.0"
+              }
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+              kotlinOptions {
+                  jvmTarget = "17"
+              }
+          }
+          EOF
+
+          cat > app/src/main/AndroidManifest.xml <<'EOF'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <application
+                  android:theme="@android:style/Theme.Material.Light.NoActionBar"
+                  android:label="MARMOK Generator">
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+
+          cat > app/src/main/java/com/marmok/generator/MainActivity.kt <<'EOF'
+          package com.marmok.generator
+
+          import android.app.Activity
+          import android.os.Bundle
+          import android.content.ClipData
+          import android.content.ClipboardManager
+          import android.content.Context
+          import android.graphics.Color
+          import android.view.Gravity
+          import android.widget.*
+          import java.security.SecureRandom
+
+          class MainActivity : Activity() {
+              private val random = SecureRandom()
+              private lateinit var result: TextView
+              private lateinit var period: Spinner
+
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+
+                  val layout = LinearLayout(this)
+                  layout.orientation = LinearLayout.VERTICAL
+                  layout.gravity = Gravity.CENTER_HORIZONTAL
+                  layout.setPadding(28, 40, 28, 28)
+                  layout.setBackgroundColor(Color.rgb(18, 18, 24))
+
+                  fun text(value: String, size: Float): TextView {
+                      return TextView(this).apply {
+                          text = value
+                          textSize = size
+                          setTextColor(Color.WHITE)
+                          gravity = Gravity.CENTER
+                      }
+                  }
+
+                  layout.addView(text("MARMOK", 32f))
+                  layout.addView(text("KEY GENERATOR", 16f))
+
+                  period = Spinner(this)
+                  val options = listOf("1D", "7D", "30D", "LIFETIME")
+                  period.adapter = ArrayAdapter(
+                      this,
+                      android.R.layout.simple_spinner_dropdown_item,
+                      options
+                  )
+                  layout.addView(period)
+
+                  result = text("Здесь появится ключ", 18f)
+                  result.setPadding(8, 40, 8, 40)
+                  layout.addView(result)
+
+                  val generate = Button(this)
+                  generate.text = "СОЗДАТЬ КЛЮЧ"
+                  layout.addView(generate)
+
+                  val copy = Button(this)
+                  copy.text = "КОПИРОВАТЬ"
+                  layout.addView(copy)
+
+                  generate.setOnClickListener {
+                      val chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+                      val code = (1..12).map {
+                          chars[random.nextInt(chars.length)]
+                      }.joinToString("")
+                      result.text = "MARMOK-${period.selectedItem}-$code"
+                  }
+
+                  copy.setOnClickListener {
+                      val key = result.text.toString()
+                      if (key.startsWith("MARMOK-")) {
+                          val clipboard = getSystemService(
+                              Context.CLIPBOARD_SERVICE
+                          ) as ClipboardManager
+                          clipboard.setPrimaryClip(
+                              ClipData.newPlainText("MARMOK key", key)
+                          )
+                          Toast.makeText(this, "Скопировано", Toast.LENGTH_SHORT).show()
+                      } else {
+                          Toast.makeText(this, "Сначала создай ключ", Toast.LENGTH_SHORT).show()
+                      }
+                  }
+
+                  setContentView(layout)
+              }
+          }
+          EOF
+
+          gradle wrapper --gradle-version 8.9
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: MARMOK-Generator-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
